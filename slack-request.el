@@ -115,7 +115,7 @@
                                               url
                                               params)
                                       team))
-                       (slack-log (format "Request Failed. URL: %s, PARAMS: %s, ERROR-THROWN: %s, SYMBOL-STATUS: %s, DATA: %s"
+                       (slack-log (format "Request Failed. URL: %S, PARAMS: %S, ERROR-THROWN: %S, SYMBOL-STATUS: %S, DATA: %S"
                                           url
                                           params
                                           error-thrown
