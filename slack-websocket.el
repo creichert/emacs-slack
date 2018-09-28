@@ -283,30 +283,30 @@
 
 (defun slack-user-typing (team)
   (with-slots (typing typing-timer) team
-    (with-slots (limit users room) typing
-      (let ((current (float-time)))
-        (if (and typing-timer (timerp typing-timer)
-                 (< limit current))
-            (progn
-              (cancel-timer typing-timer)
-              (setq typing-timer nil)
-              (setq typing nil)
-              (message ""))
-          (slack-if-let* ((buf (slack-buffer-find 'slack-message-buffer room team))
-                          (show-typing-p (slack-buffer-show-typing-p
-                                          (get-buffer (slack-buffer-name buf)))))
-              (let ((team-name (slack-team-name team))
-                    (room-name (slack-room-name room team))
-                    (visible-users (cl-remove-if
-                                    #'(lambda (u) (< (oref u limit) current))
-                                    users)))
-                (slack-log
-                 (format "%s is typing..."
-                         (mapconcat #'(lambda (u) (oref u user-name))
-                                    visible-users
-                                    ", "))
-                 team
-                 :level 'info))))))))
+    (let ((current (float-time)))
+      (if (and typing-timer
+               (timerp typing-timer)
+               (< (oref typing limit) current))
+          (progn
+            (cancel-timer typing-timer)
+            (setq typing-timer nil)
+            (setq typing nil)
+            (message ""))
+        (slack-if-let* ((typing (oref team typing))
+                        (room (oref typing room))
+                        (buf (slack-buffer-find 'slack-message-buffer room team))
+                        (show-typing-p (slack-buffer-show-typing-p
+                                        (get-buffer (slack-buffer-name buf)))))
+            (let ((visible-users (cl-remove-if
+                                  #'(lambda (u) (< (oref u limit) current))
+                                  (oref typing users))))
+              (slack-log
+               (format "%s is typing..."
+                       (mapconcat #'(lambda (u) (oref u user-name))
+                                  visible-users
+                                  ", "))
+               team
+               :level 'info)))))))
 
 (defun slack-ws-handle-user-typing (payload team)
   (slack-if-let*
@@ -317,19 +317,18 @@
                                                    (slack-buffer-name buf)))))
       (let ((limit (+ 3 (float-time))))
         (with-slots (typing typing-timer) team
-          (if (and typing (string= (oref room id)
-                                   (oref (oref typing room) id)))
-              (with-slots ((typing-limit limit) (typing-room room) users) typing
-                (setq typing-limit limit)
-                (let ((typing-user (make-instance 'slack-typing-user
-                                                  :limit limit
-                                                  :user-name user)))
-                  (setq users
-                        (cons typing-user
-                              (cl-remove-if #'(lambda (u)
-                                                (string= (oref u user-name)
-                                                         user))
-                                            users)))))
+          (if (and typing
+                   (string= (oref room id)
+                            (oref (oref typing room) id)))
+              (progn
+                (oset typing limit limit)
+                (oset typing users (cons (make-instance 'slack-typing-user
+                                                        :limit limit
+                                                        :user-name user)
+                                         (cl-remove-if #'(lambda (u)
+                                                           (string= (oref u user-name)
+                                                                    user))
+                                                       (oref typing users)))))
             (let ((new-typing (make-instance 'slack-typing
                                              :room room :limit limit))
                   (typing-user (make-instance 'slack-typing-user
