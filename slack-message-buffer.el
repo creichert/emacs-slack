@@ -47,8 +47,69 @@
   (add-hook 'lui-pre-output-hook 'slack-display-inline-action t t)
   ;; TODO move to `slack-room-buffer' ?
   (cursor-sensor-mode)
+  (add-hook 'lui-post-output-hook 'slack-lui-post-output-hook t t)
   (setq-local lui-max-buffer-size nil)
   )
+
+(defun slack-lui-post-output-hook ()
+  (save-excursion
+    (goto-char (point-min))
+    ;; (setq header-removed-p nil)
+    (slack-if-let* ((sb slack-current-buffer)
+                    (room (oref sb room))
+                    (team (oref sb team))
+                    (current-message-point (point-min))
+                    (current-message-end (point-max))
+                    (current-message-ts (slack-get-ts)))
+        (progn
+          (save-restriction
+            (widen)
+            (cl-labels
+                ((goto-prev-message
+                  ()
+                  (slack-if-let*
+                      ((prev-message-point
+                        (previous-single-property-change (point) 'ts)))
+                      (goto-char prev-message-point))))
+              ;; Skip blank line
+              (goto-prev-message)
+              ;; Got actual prev message
+              (unless (slack-get-ts) (goto-prev-message)))
+            (slack-if-let* ((prev-message-ts (slack-get-ts))
+                            (different-message-p (not (string= prev-message-ts
+                                                               current-message-ts)))
+                            (prev-message
+                             (slack-room-find-message room
+                                                      prev-message-ts))
+                            (prev-user (slack-user-find prev-message team))
+                            (current-message
+                             (slack-room-find-message room
+                                                      current-message-ts))
+                            (current-user (slack-user-find current-message team))
+                            (same-author-p (string= (plist-get prev-user :id)
+                                                    (plist-get current-user :id)))
+                            (header-end-point (next-single-char-property-change
+                                               current-message-point
+                                               'slack-message-header))
+                            ;; (timestamp-beg (next-single-char-property-change
+                            ;;                 current-message-point
+                            ;;                 'lui-time-stamp))
+                            ;; (timestamp-end (next-single-char-property-change
+                            ;;                 timestamp-beg
+                            ;;                 'lui-time-stamp))
+                            )
+                (progn
+                  (let ((inhibit-read-only t))
+                    ;; (setq header-removed-p t)
+                    ;; (delete-region timestamp-beg timestamp-end)
+                    (delete-region (- current-message-point 2)
+                                   header-end-point)))))
+          ;; (and header-removed-p
+          ;;      (let ((inhibit-read-only t)
+          ;;            (timestamp (get-text-property current-message-point
+          ;;                                          'lui-formatted-time-stamp)))
+          ;;        (lui-time-stamp timestamp)))
+          ))))
 
 (defclass slack-message-buffer (slack-room-buffer)
   ((oldest :initform nil :type (or null string))
